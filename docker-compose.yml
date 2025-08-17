@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: pos-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: pos_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - pos-network
+
+  # Print Server Microservice
+  print-server:
+    build:
+      context: ./print-server
+      dockerfile: Dockerfile
+    container_name: pos-print-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    ports:
+      - "3001:3001"
+    networks:
+      - pos-network
+    depends_on:
+      - mongodb
+
+  # Main POS Application
+  pos-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pos-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DB_ADAPTER=mongoose
+      - MONGO_URI=mongodb://admin:password123@mongodb:27017/pos_db?authSource=admin
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - NEXT_PUBLIC_PRINT_ENABLED=true
+      - NEXT_PUBLIC_PRINT_SERVER_URL=http://print-server:3001
+      - NEXT_PUBLIC_PRINTER_IP=192.168.1.100
+      - NEXT_PUBLIC_PRINTER_PORT=9100
+      - NEXT_PUBLIC_STORE_NAME=Your Store Name
+      - NEXT_PUBLIC_STORE_ADDRESS=123 Main St, City, State 12345
+      - NEXT_PUBLIC_STORE_PHONE=(555) 123-4567
+      - NEXT_PUBLIC_RECEIPT_FOOTER=Thank you for your business!
+    ports:
+      - "3000:3000"
+    networks:
+      - pos-network
+    depends_on:
+      - mongodb
+      - print-server
+
+volumes:
+  mongodb_data:
+
+networks:
+  pos-network:
+    driver: bridge
